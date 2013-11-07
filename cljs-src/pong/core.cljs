@@ -1,7 +1,8 @@
 (ns pong.core
   (:require
     [goog.dom :as dom]
-    [goog.events :as events]))
+    [goog.events :as events])
+  (:use [jayq.core :only [$ css html]]))
 
 (def canvas (.getElementById js/document "canvas"))
 (def ctx (.getContext canvas "2d"))
@@ -50,7 +51,8 @@
 ;;   state)
 
 (defn move-mouse [e]
-  (.log js/console e))
+  ;;(.log js/console e)
+)
 
 (defn set-sound [sound]
   (.log js/console sound))
@@ -64,12 +66,6 @@
           (println
             (str "You called a function"
               "that does not exist")))))))
-
-;; (comment
-;; {{player-y :y} :player 
-;;          {ball-y :y ball-max :maxspeed} :ball 
-;;          {player-height :player-height} :as state}
-;; )
 
 (defn set-velocity-y [func {{player-y :y} :player 
                             {ball-y :y ball-max :maxspeed} :ball 
@@ -93,7 +89,6 @@
              {ball-x :x ball-y :y ball-radius :radius} :ball
              {computer-y :y} :computer 
              canvas-width :canvas-width canvas-height :canvas-height :as state}]
-
   (if-not (:paused state)
     (let [size 3]
       (.clearRect ctx 0 0 canvas.width canvas.height)
@@ -112,12 +107,42 @@
       (.fillRect ctx (- ball-x ball-radius) (- ball-y ball-radius) (* ball-radius 2) (* ball-radius 2))))
   state)
 
+(defn hide-title-screen []
+  (let [$title-screen ($ :#titleScreen)
+        $play-screen ($ :#playScreen)]
+    (.hide $title-screen)
+    (.show $play-screen)
+    ;;(init)
+))
+
+(defn pause-game [state]
+  (let [$pause-button ($ :#pauseButton)]
+    (if-not (:paused state)
+      (do
+        (-> state 
+          (assoc-in [:paused] true))
+        (.html $pause-button "Continue."))
+      (do
+        ;;(-> state (assoc-in [:paused] false))
+        ;;(.html $pause-button "Pause.")
+        )
+      )
+    )
+  state)
+
 (defn intro [state]
+  (let [play-button  (.getElementById js/document "playButton")
+        pause-button (.getElementById js/document "pauseButton") 
+        sound-button (.getElementById js/document "soundButton")]
+    (events/listen play-button  "click" #((hide-title-screen)))
+    (events/listen pause-button "click" #(pause-game state))
+    ;; (events/listen sound-button "click" #(.log js/console "hi"))
+) 
   state)
 
 (defn computer-up? [{{computer-y :y} :computer 
                      {ball-y :y} :ball player-height :player-height 
-                      canvas-height :canvas-height :as state}] 
+                     canvas-height :canvas-height :as state}] 
   (and (< (+ computer-y 20) ball-y) (<= (+ computer-y (/ player-height 2)) canvas-height)))
 
 (defn computer-down? [{{computer-y :y} :computer 
@@ -235,20 +260,26 @@
   state)
 
 (defn load []
+  (.log js/console "hi2")
   (let [init-state state
         interval   (/ 1000 fps)]
     (events/listen js/window "mousemove" move-mouse) 
     (.setTimeout js/window
       (fn game-loop [s]
-        (let [state (or s init-state)
-              new-state (driver state)]
+        (let [i-state init-state
+              new-state (driver i-state)]
+          (.log js/console "hi")
           (.setTimeout js/window
             #(game-loop new-state)
             interval)))
       interval)))
 
-(defn init []
-  (load))
+(defn init [state]
+  (load)
+  (-> state 
+    (intro))
+)
 
 (.setTimeout js/window (fn [x] (init)) 0)
+
 
