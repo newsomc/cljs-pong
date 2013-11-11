@@ -11,8 +11,8 @@
 (def sound-wall (.getElementById js/document "bounce-wall"))
 (def last-game-time (js/Date.))
 (def fps 30)
-
 (def state {
+   :init true
    :player {
      :y (/ canvas.height 2)
      :score 0
@@ -97,7 +97,7 @@
         (.fillRect ctx 0 (- (:y computer) (/ ph 2)) pw ph)
 
         ;; Right Player
-        (.fillRect ctx (- cw pw) (- (:y player) ph) ph)
+        (.fillRect ctx (- cw pw) (- (:y player) ph) pw ph)
         (set! (. ctx  -fillStyle) "rgba(192,192,192,8)")
 
         ;; Ball
@@ -218,13 +218,7 @@
     (assoc-in [:ball :x] (inc (* (:vx ball) move-amount)))
     (assoc-in [:ball :y] (inc (* (:vy ball) move-amount)))))
 
-(defn driver [{{computer-y :y} :computer  
-               {player-y :y} :player
-               {ball-y :y ball-x :y ball-radius :radius} :ball 
-               player-height :player-height 
-               canvas-height :canvas-height 
-               canvas-width  :canvas-width :as state}]
-
+(defn driver [state]
   (let [date-time (js/Date.)
         game-time (if (> (- date-time last-game-time) 0) (- date-time last-game-time) 0)
         move-amount (if (> game-time 0) (/ game-time 10) 1)]
@@ -248,7 +242,7 @@
 
 (defn load []
   (let [init-state state
-        interval   (/ 1000 fps)]
+        interval (/ 1000 fps)]
     (events/listen js/window "mousemove" #(move-mouse state %)) 
     (.setTimeout js/window
       (fn game-loop [s]
