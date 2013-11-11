@@ -40,7 +40,6 @@
    :canvas-height (.-height canvas)})
 
 (defn move-mouse [state e]
-  ;(.log js/console "move-mouse called...")
   (let [-e (.-event js/window)]
     (if (nil? e)
       (-> state (assoc-in [:player :y] (.-offsetY -e)))
@@ -48,12 +47,9 @@
   (-> state (assoc-in [:player :y] (dec (.-offsetTop canvas))))
   (if (and (>= (/ (:player-height state) 2) 0)
         (<= (/ (+ (:y (:player state)) (:player-height state)) 2) (:canvas-height state)))
-    (-> state (assoc-in [:player :y] (:y (:player state)))))
-  state)
+    (-> state (assoc-in [:player :y] (:y (:player state))))))
 
-(defn set-sound [sound]
-  ;(.log js/console sound)
-)
+(defn set-sound [sound])
 
 (defn play-sound [sound]
   (if (:sound state)
@@ -65,49 +61,47 @@
             (str "You called a function"
               "that does not exist")))))))
 
-(defn set-velocity-y [func {{player-y :y} :player 
-                            {ball-y :y ball-max :maxspeed} :ball 
-                            player-height :player-height :as state}]
-  (let [player-velocity (/ (- player-y ball-y) (* player-height ball-max))
-        ball-velocity (/ (- ball-y player-y) (* player-height ball-max))]
+(defn set-velocity-y [func {:keys [ball player] :as state}]
+  (let [ph (:player-height state)
+        player-velocity (/ (- (:y player) (:y ball)) (* ph (:maxspeed ball)))
+        ball-velocity (/ (- (:y ball) (:y player)) (* ph (:maxspeed ball) ))]
     (if (= func +)
       (-> state (assoc-in [:ball :vy] (func player-velocity)))
-      (-> state (assoc-in [:ball :vy] (func ball-velocity)))))
-  state)
+      (-> state (assoc-in [:ball :vy] (func ball-velocity))))))
 
-(defn change-ball-direction [{{ball-y :y} :ball {player-y :y} :player :as state}]
+(defn change-ball-direction [{:keys [ball player] :as state}]
   (cond 
-    (> player-y ball-y) (set-velocity-y - state)
-    (< player-y ball-y) (set-velocity-y + state))
-  (-> state (update-in [:ball :vx] (* -1)))
-  state)
+    (> (:y player) (:y ball)) (set-velocity-y - state)
+    (< (:y player) (:y ball)) (set-velocity-y + state))
+  (-> state (update-in [:ball :vx] (* -1))))
 
-(defn draw [{{player-y :y} :player 
-             {ball-x :x ball-y :y ball-radius :radius} :ball
-             {computer-y :y} :computer 
-             canvas-width :canvas-width canvas-height :canvas-height :as state}]
+(defn draw [{:keys [player ball computer] :as state}]
+  (let [cw (:canvas-width state)
+        ch (:canvas-width state)
+        ph (:player-height state)
+        pw (:player-width state)]
 
-  (if-not (:paused state)
-    (let [size 3]
+    (if-not (:paused state)
+      (let [size 3
+            rb (:radius ball)]
+        (.clearRect ctx 0 0 cw ch)
 
-      (.clearRect ctx 0 0 (:canvas-width state) (:canvas-height state))
+        (set! (. ctx  -fillStyle) "rgb(64,64,64)")
 
-      (set! (. ctx  -fillStyle) "rgb(64,64,64)")
+        (dotimes [y (range 0 ch)]
+          (.fillRect (/ cw 2) (* y size) size size))
 
-      (dotimes [y (range 0 canvas-height)]
-        (.fillRect (/ canvas-width 2) (* y size) size size))
+        (set! (. ctx  -fillStyle) "rgba(128, 128, 128, .8)")
 
-      (set! (. ctx  -fillStyle) "rgba(128, 128, 128, .8)")
+        ;; Left Player
+        (.fillRect ctx 0 (- (:y computer) (/ ph 2)) pw ph)
 
-      ;; Left Player
-      (.fillRect ctx 0 (- computer-y (/ (:player-height state) 2)) (:player-width state) (:player-height state))
+        ;; Right Player
+        (.fillRect ctx (- cw pw) (- (:y player) ph) ph)
+        (set! (. ctx  -fillStyle) "rgba(192,192,192,8)")
 
-      ;; Right Player
-      (.fillRect ctx (- (:canvas-width state) (:player-width state)) (- player-y (:player-height state)) (:player-width state) (:player-height state))
-      (set! (. ctx  -fillStyle) "rgba(192,192,192,8)")
-      
-      ;; Ball
-      (.fillRect ctx (- ball-x ball-radius) (- ball-y ball-radius) (* ball-radius 2) (* ball-radius 2)))))
+        ;; Ball
+        (.fillRect ctx (- (:x ball) rb) (- (:y ball) rb) (* rb 2) (* rb 2))))))
 
 (defn start-game [state]
   (let [$title-screen ($ :#titleScreen)
@@ -119,64 +113,62 @@
   (let [$pause-button ($ :#pauseButton)]
     (if-not (:paused state)
       (do
+        (.html $pause-button "Continue.")
         (-> state 
-         (assoc-in [:paused] true))
-        ;;(.html $pause-button "Continue.")
-        )
+         (assoc-in [:paused] true)))
       (do
-        (-> state (assoc-in [:paused] false))
-        ;;(.html $pause-button "Pause.")
-        )
-      )
-    )
-  state)
+        (.html $pause-button "Pause.")
+        (-> state (assoc-in [:paused] false))))))
 
-(defn intro [state]
-  (let [play-button  (.getElementById js/document "playButton")
-        pause-button (.getElementById js/document "pauseButton") 
-        sound-button (.getElementById js/document "soundButton")]
-    (events/listen play-button  "click" #(start-game state))
-    (events/listen pause-button "click" #(pause-game state))) 
-  state)
+(defn intro []
+  (let [play  (.getElementById js/document "playButton")
+        pause(.getElementById js/document "pauseButton") 
+        sound (.getElementById js/document "soundButton")]
+    (events/listen play "click" #(start-game state))
+    (events/listen pause "click" #(pause-game state))))
 
-(defn computer-up? [{{computer-y :y} :computer 
-                     {ball-y :y} :ball player-height :player-height 
-                     canvas-height :canvas-height :as state}] 
-  (and (< (+ computer-y 20) ball-y) (<= (+ computer-y (/ player-height 2)) canvas-height)))
+(defn computer-up? [{:keys [ball computer] :as state}] 
+  (let [cy (:y computer)]
+    (and (< (+ cy 20) (:y ball)) 
+         (<= (+ cy (/ (:player-height state) 2)) (:canvas-height state)))))
 
-(defn computer-down? [{{computer-y :y} :computer 
-                       {ball-y :y} :ball player-height :player-height :as state}]
-  (and  (> (- computer-y 20) ball-y) (>= (- computer-y (/ player-height 2)) 0)))
+(defn computer-down? [{:keys [ball computer] :as state}]
+  (let [cy (:y computer)]
+    (and (> (- cy 20) (:y ball))
+         (>= (- cy (/ (:player-height state) 2)) 0))))
 
-(defn ball-hit-wall? [{{ball-y :y ball-radius :radius} :ball 
-                        canvas-height :canvas-height :as state}]
-  (or (> (+ ball-y ball-radius) canvas-height) (< (- ball-y ball-radius) 0)))
+(defn move-computer [state move-amount func]
+  (-> state 
+    (update-in [:computer :y] (func (* (:computer-speed state) move-amount)))))
 
-(defn bounce-ball [{{ball-y :y ball-radius :radius} :ball 
-                    canvas-height :canvas-height :as state}]
+(defn ball-hit-wall? [{:keys [ball] :as state}]
+  (or (> (+ (:y ball) (:radius ball)) (:canvas-height state)) 
+      (< (- (:y ball) (:radius ball)) 0)))
+
+(defn bounce-ball [{:keys [ball] :as state}]
   (play-sound :sound-wall)
-  (if (<= ball-y ball-radius)
+  (if (<= (:y ball) (:radius ball))
     (-> state
-      (assoc-in [:ball :y] ball-radius))
-    :else (-> state 
-            (assoc-in [:ball :y] (- canvas-height ball-radius))))
+      (assoc-in [:ball :y] (:radius ball)))
+    (-> state 
+      (assoc-in [:ball :y] (- (:canvas-height state) (:radius ball)))))
   (-> state
-    (assoc-in [:ball :vy] (* -1)))
-  state)
+    (assoc-in [:ball :vy] (* -1))))
 
-(defn ball-hit-player? [{{ball-x :x ball-radius :radius} :ball 
-                         canvas-width :canvas-width  player-width :player-width :as state}]
-  (>= (+ ball-x ball-radius) (- canvas-width player-width)))
+(defn ball-hit-player? [{:keys [ball] :as state}]
+  (>= (+ (:x ball) (:radius ball)) 
+      (- (:canvas-width state) (:player-width state))))
 
-(defn player-collide? [{{ball-y :y ball-radius :radius} :ball 
-                        {player-y :y}  :player
-                        player-height :player-height canvas-height :canvas-height :as state}]
-  (and (>= (+ ball-y ball-radius) (- player-y (/ player-height 2))) (<= (+ ball-y ball-radius) (+ (:player (:y state)) (/ player-height 2)))))
+(defn player-collide? [{:keys [ball player] :as state}]
+  (let [ph (:player-height state)]
+    (and (>= (+ (:y ball) (:radius ball)) (- (:y player) (/ ph 2))) 
+         (<= (+ (:y ball) (:radius ball)) (+ (:y player) (/ ph 2))))))
 
-(defn ball-x-velocity [func {{vx :vx maxspeed :maxspeed mult :multiplier} :ball :as state}]
-  #_(if (<= vx maxspeed) 
-    (-> state (update-in [:ball :vx] (func (mult)))))
-  state)
+(defn ball-x-velocity [func {:keys [ball] :as state}]
+  (let [mult (:multiplier ball)]
+    (if (<= (:vx ball) (:maxspeed ball)) 
+      (-> state 
+        (update-in [:ball :vx] (func (mult)))))))
 
 (defn ball-player-collide [state]
   (if (player-collide? state) 
@@ -184,65 +176,63 @@
       (play-sound :sound-right) 
       (->> state 
         (ball-x-velocity inc))))
-  (change-ball-direction state)
-  state)
+  (change-ball-direction state))
 
-(defn ball-hit-computer? [{{ball-x :x ball-radius :radius} :ball player-width :player-width :as state}]
-  (<= (- ball-x ball-radius) player-width))
+(defn ball-hit-computer? [{:keys [ball] :as state}]
+  (let [pw (:player-width state)]
+    (<= (- (:x ball) (:radius ball)) pw)))
 
 (defn set-score [state]
-  (-> state
-    (update-in [:player :score] (inc 1)))
   (.innerHTML (.getElementById js/document "playerScore") (:score (:player state)))
-  state)
+  (-> state
+    (update-in [:player :score] (inc 1))))
 
-(defn reset-ball [{canvas-width :canvas-width canvas-height :canvas-height :as state}]
-  #_(-> state
-    (update-in [:ball :x] (/ canvas-width 2))
-    (update-in [:ball :y] (/ canvas-height 2))
-    (update-in [:ball :vy] (* Math/random (- 4 2))))
-  state)
+(defn reset-ball [state]
+  (let [cw (:canvas-width state)
+        ch (:canvas-height state)]
+    (-> state
+      (assoc-in [:ball :x] (/ cw 2))
+      (assoc-in [:ball :y] (/ ch 2))
+      (assoc-in [:ball :vy] (* Math/random (- 4 2))))))
 
-(defn ball-computer-collide [{ {ball-y :y ball-x :x ball-radius :radius ball-vx :vx ball-max :maxspeed} :ball 
-                               {computer-y :y} :computer
-                               player-height :player-height :as state}]
-  (if (and (>= (+ ball-y ball-radius) (+ computer-y (/ player-height 2))) 
-           (<= (+ ball-y ball-radius) (+ computer-y (/ player-height 2))))
+(defn ball-computer-collide? [{:keys [ball computer] :as state}]
+  (let [ph (:player-height state)]
+    (and (>= (+ (:y ball) (:radius ball)) (+ (:y computer) (/ ph 2))) 
+         (<= (+ (:y ball) (:radius ball)) (+ (:y computer) (/ ph 2))))))
+
+(defn ball-computer-collide [{:keys [ball computer] :as state}]
+  (if (ball-computer-collide? state)
     (do
       (play-sound :sound-left)
-      (if (>= ball-vx (- ball-max))
+      (if (>= (:vx ball) (- (:maxspeed ball)))
         (->> state
-          (ball-x-velocity dec)))
+            (ball-x-velocity dec)))
       (change-ball-direction state))
     (do
       (-> state
         (set-score)
         (reset-ball)))))
 
-(defn move-ball [{{ball-vx :vx ball-vy :vy} :ball :as state} move-amount]
-  (.log js/console "move-ball called... ball vx: " ball-vx "ball-vy" ball-vy)
+(defn move-ball [{:keys [ball] :as state} move-amount]
   (-> state
-    (assoc-in [:ball :x] (inc (* ball-vx move-amount)))
-    (assoc-in [:ball :y] (inc (* ball-vy move-amount))))
-  state)
+    (assoc-in [:ball :x] (inc (* (:vx ball) move-amount)))
+    (assoc-in [:ball :y] (inc (* (:vy ball) move-amount)))))
 
 (defn driver [{{computer-y :y} :computer  
                {player-y :y} :player
                {ball-y :y ball-x :y ball-radius :radius} :ball 
                player-height :player-height 
                canvas-height :canvas-height 
-               canvas-width  :canvas-width
-               computer-speed :computer-speed :as state}]
+               canvas-width  :canvas-width :as state}]
 
   (let [date-time (js/Date.)
         game-time (if (> (- date-time last-game-time) 0) (- date-time last-game-time) 0)
         move-amount (if (> game-time 0) (/ game-time 10) 1)]
-
     (draw
       (cond 
         ;; Move CPU player.
-        (computer-up? state) (-> state (update-in [:computer :y] (inc (* computer-speed move-amount))))
-        (computer-down? state) (-> state (update-in [:computer :y] (dec (* computer-speed move-amount))))
+        (computer-up? state) (-> state (move-computer move-amount inc))
+        (computer-down? state) (-> state (move-computer move-amount dec))
         
         ;; Change direction of ball when hitting wall.
         (ball-hit-wall? state) (bounce-ball state)
@@ -253,9 +243,8 @@
         ;; Collision beteween ball and CPU.
         (ball-hit-computer? state) (ball-computer-collide state)
         
-        ;; If no conditions are met, Keep ball moving.
-        :else (-> state (move-ball move-amount)))))
-  state)
+        ;; If no conditions are met keep ball moving.
+        :else (-> state (move-ball move-amount))))))
 
 (defn load []
   (let [init-state state
@@ -270,9 +259,6 @@
             interval)))
       interval)))
 
-(defn init []
-  (load)
-  (-> state 
-    (intro)))
+(defn init [] (load) (intro))
 
 (.setTimeout js/window (fn [x] (init)) 0)
