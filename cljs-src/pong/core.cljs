@@ -12,19 +12,18 @@
 (def last-game-time (js/Date.))
 (def fps 30)
 (def state {
-   :init true
    :player {
-     :y (/ canvas.height 2)
+     :y (/ (.-height canvas) 2)
      :score 0
    }
    :computer {
-     :y (/ canvas.height 2)
+     :y (/ (.-height canvas) 2)
      :score 0
      :speed 2
    }
    :ball {
-     :x  (/ canvas.width 2) 
-     :y  (/ canvas.height 2) 
+     :x  (/ (.-width canvas) 2) 
+     :y  (/ (.-height canvas) 2) 
      :vx (if (rand)  1 -1)  
      :vy (* (rand) (- 4 2))
      :bounces  0
