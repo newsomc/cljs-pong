@@ -89,10 +89,14 @@
 
   (if-not (:paused state)
     (let [size 3]
+
       (.clearRect ctx 0 0 (:canvas-width state) (:canvas-height state))
+
       (set! (. ctx  -fillStyle) "rgb(64,64,64)")
+
       (dotimes [y (range 0 canvas-height)]
         (.fillRect (/ canvas-width 2) (* y size) size size))
+
       (set! (. ctx  -fillStyle) "rgba(128, 128, 128, .8)")
 
       ;; Left Player
@@ -236,7 +240,7 @@
 
     (draw
       (cond 
-        ;; move CPU player
+        ;; Move CPU player.
         (computer-up? state) (-> state (update-in [:computer :y] (inc (* computer-speed move-amount))))
         (computer-down? state) (-> state (update-in [:computer :y] (dec (* computer-speed move-amount))))
         
