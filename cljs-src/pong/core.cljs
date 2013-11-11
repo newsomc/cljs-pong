@@ -39,23 +39,21 @@
    :canvas-width (.-width canvas)
    :canvas-height (.-height canvas)})
 
-;; (defn move-mouse [state event]
-;;   (let [e (.-event js/window)]
-;;     (if (empty? event)
-;;       (-> state (update-in [:player :y] (.-offsetY e)))
-;;       (-> state (update-in [:player :y] (.-screenY event)))))
-;;   (-> state (update-in [:player :y] (dec (.-offsetTop canvas))))
-;;   (if (and (>= (/ (:player-height state) 2) 0)
-;;         (<= (/ (+ (:y (:player state)) (:player-height state)) 2) (canvas.height;; )))
-;;     (-> state (update-in [:player :y] (:y (:player state)))))
-;;   state)
-
-(defn move-mouse [e]
-  ;;(.log js/console e)
-)
+(defn move-mouse [state e]
+  ;(.log js/console "move-mouse called...")
+  (let [-e (.-event js/window)]
+    (if (nil? e)
+      (-> state (assoc-in [:player :y] (.-offsetY -e)))
+      (-> state (assoc-in [:player :y] (.-screenY e)))))
+  (-> state (assoc-in [:player :y] (dec (.-offsetTop canvas))))
+  (if (and (>= (/ (:player-height state) 2) 0)
+        (<= (/ (+ (:y (:player state)) (:player-height state)) 2) (:canvas-height state)))
+    (-> state (assoc-in [:player :y] (:y (:player state)))))
+  state)
 
 (defn set-sound [sound]
-  (.log js/console sound))
+  ;(.log js/console sound)
+)
 
 (defn play-sound [sound]
   (if (:sound state)
@@ -81,49 +79,48 @@
   (cond 
     (> player-y ball-y) (set-velocity-y - state)
     (< player-y ball-y) (set-velocity-y + state))
-  (-> state
-    (update-in [:ball :vx] (* -1)))
+  (-> state (update-in [:ball :vx] (* -1)))
   state)
 
 (defn draw [{{player-y :y} :player 
              {ball-x :x ball-y :y ball-radius :radius} :ball
              {computer-y :y} :computer 
              canvas-width :canvas-width canvas-height :canvas-height :as state}]
+
   (if-not (:paused state)
     (let [size 3]
-      (.clearRect ctx 0 0 canvas.width canvas.height)
-      (.fillStyle ctx "rgb(64,64,64)")
+      (.clearRect ctx 0 0 (:canvas-width state) (:canvas-height state))
+      (set! (. ctx  -fillStyle) "rgb(64,64,64)")
       (dotimes [y (range 0 canvas-height)]
         (.fillRect (/ canvas-width 2) (* y size) size size))
-
-      (.fillStyle ctx "rgba(128, 128, 128, .8)")
+      (set! (. ctx  -fillStyle) "rgba(128, 128, 128, .8)")
 
       ;; Left Player
       (.fillRect ctx 0 (- computer-y (/ (:player-height state) 2)) (:player-width state) (:player-height state))
 
       ;; Right Player
-      (.fillRect ctx (- (:canvas-width state) (:player-width state)) (- player-y (:player-height state) (:player-width state) (:player-height state)))
-      (.fillStyle ctx "rgba(192,192,192,8)")
-      (.fillRect ctx (- ball-x ball-radius) (- ball-y ball-radius) (* ball-radius 2) (* ball-radius 2))))
-  state)
+      (.fillRect ctx (- (:canvas-width state) (:player-width state)) (- player-y (:player-height state)) (:player-width state) (:player-height state))
+      (set! (. ctx  -fillStyle) "rgba(192,192,192,8)")
+      
+      ;; Ball
+      (.fillRect ctx (- ball-x ball-radius) (- ball-y ball-radius) (* ball-radius 2) (* ball-radius 2)))))
 
-(defn hide-title-screen []
+(defn start-game [state]
   (let [$title-screen ($ :#titleScreen)
         $play-screen ($ :#playScreen)]
     (.hide $title-screen)
-    (.show $play-screen)
-    ;;(init)
-))
+    (.show $play-screen)))
 
 (defn pause-game [state]
   (let [$pause-button ($ :#pauseButton)]
     (if-not (:paused state)
       (do
         (-> state 
-          (assoc-in [:paused] true))
-        (.html $pause-button "Continue."))
+         (assoc-in [:paused] true))
+        ;;(.html $pause-button "Continue.")
+        )
       (do
-        ;;(-> state (assoc-in [:paused] false))
+        (-> state (assoc-in [:paused] false))
         ;;(.html $pause-button "Pause.")
         )
       )
@@ -134,10 +131,8 @@
   (let [play-button  (.getElementById js/document "playButton")
         pause-button (.getElementById js/document "pauseButton") 
         sound-button (.getElementById js/document "soundButton")]
-    (events/listen play-button  "click" #((hide-title-screen)))
-    (events/listen pause-button "click" #(pause-game state))
-    ;; (events/listen sound-button "click" #(.log js/console "hi"))
-) 
+    (events/listen play-button  "click" #(start-game state))
+    (events/listen pause-button "click" #(pause-game state))) 
   state)
 
 (defn computer-up? [{{computer-y :y} :computer 
@@ -175,9 +170,8 @@
   (and (>= (+ ball-y ball-radius) (- player-y (/ player-height 2))) (<= (+ ball-y ball-radius) (+ (:player (:y state)) (/ player-height 2)))))
 
 (defn ball-x-velocity [func {{vx :vx maxspeed :maxspeed mult :multiplier} :ball :as state}]
-  (if (<= vx maxspeed) 
-    (-> state
-      (update-in [:ball :vx] (func (mult)))))
+  #_(if (<= vx maxspeed) 
+    (-> state (update-in [:ball :vx] (func (mult)))))
   state)
 
 (defn ball-player-collide [state]
@@ -199,7 +193,7 @@
   state)
 
 (defn reset-ball [{canvas-width :canvas-width canvas-height :canvas-height :as state}]
-  (-> state
+  #_(-> state
     (update-in [:ball :x] (/ canvas-width 2))
     (update-in [:ball :y] (/ canvas-height 2))
     (update-in [:ball :vy] (* Math/random (- 4 2))))
@@ -221,10 +215,11 @@
         (set-score)
         (reset-ball)))))
 
-(defn move-ball [move-amount { {ball-vx :vx ball-vy :vy} :ball :as state}]
+(defn move-ball [{{ball-vx :vx ball-vy :vy} :ball :as state} move-amount]
+  (.log js/console "move-ball called... ball vx: " ball-vx "ball-vy" ball-vy)
   (-> state
-    (update-in [:ball :x] (inc (* ball-vx move-amount)))
-    (update-in [:ball :y] (inc (* ball-vy move-amount))))
+    (assoc-in [:ball :x] (inc (* ball-vx move-amount)))
+    (assoc-in [:ball :y] (inc (* ball-vy move-amount))))
   state)
 
 (defn driver [{{computer-y :y} :computer  
@@ -234,52 +229,46 @@
                canvas-height :canvas-height 
                canvas-width  :canvas-width
                computer-speed :computer-speed :as state}]
+
   (let [date-time (js/Date.)
         game-time (if (> (- date-time last-game-time) 0) (- date-time last-game-time) 0)
         move-amount (if (> game-time 0) (/ game-time 10) 1)]
-    (if-not (:paused state)
+
+    (draw
       (cond 
         ;; move CPU player
         (computer-up? state) (-> state (update-in [:computer :y] (inc (* computer-speed move-amount))))
         (computer-down? state) (-> state (update-in [:computer :y] (dec (* computer-speed move-amount))))
-
+        
         ;; Change direction of ball when hitting wall.
         (ball-hit-wall? state) (bounce-ball state)
-
+        
         ;; Collision between ball and player.
         (ball-hit-player? state) (ball-player-collide state)
-
+        
         ;; Collision beteween ball and CPU.
         (ball-hit-computer? state) (ball-computer-collide state)
-
+        
         ;; If no conditions are met, Keep ball moving.
-        :else (->> state (move-ball move-amount))))
-
-    (-> state 
-      (draw)))
+        :else (-> state (move-ball move-amount)))))
   state)
 
 (defn load []
-  (.log js/console "hi2")
   (let [init-state state
         interval   (/ 1000 fps)]
-    (events/listen js/window "mousemove" move-mouse) 
+    (events/listen js/window "mousemove" #(move-mouse state %)) 
     (.setTimeout js/window
       (fn game-loop [s]
-        (let [i-state init-state
-              new-state (driver i-state)]
-          (.log js/console "hi")
-          (.setTimeout js/window
+        (let [state (or s init-state)
+              new-state (driver state)]
+        (.setTimeout js/window
             #(game-loop new-state)
             interval)))
       interval)))
 
-(defn init [state]
+(defn init []
   (load)
   (-> state 
-    (intro))
-)
+    (intro)))
 
 (.setTimeout js/window (fn [x] (init)) 0)
-
-
