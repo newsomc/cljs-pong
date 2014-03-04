@@ -33,57 +33,33 @@
    }
    :player-height 80
    :player-width 4
-   :paused true
    :sound true
    :canvas-width (.-width canvas)
-   :canvas-height (.-height canvas)})
+   :canvas-height (.-height canvas)
+   :tick nil })
 
-(defn move-mouse [state e]
-  (let [-e (.-event js/window)]
-    (if (nil? e)
-      (-> state (assoc-in [:player :y] (.-offsetY -e)))
-      (-> state (assoc-in [:player :y] (.-screenY e)))))
-  (-> state (assoc-in [:player :y] (dec (.-offsetTop canvas))))
-  (if (and (>= (/ (:player-height state) 2) 0)
-        (<= (/ (+ (:y (:player state)) (:player-height state)) 2) (:canvas-height state)))
-    (-> state (assoc-in [:player :y] (:y (:player state))))))
+;; Stateful stuff
+(def paused (atom true))
 
-(defn set-sound [sound])
+(def mouse-state (atom nil))
 
-(defn play-sound [sound]
-  (if (:sound state)
-    (try
-      (set-sound sound)
-      (catch js/Error e
-        (if (= (type e) js/ReferenceError)
-          (println
-            (str "You called a function"
-              "that does not exist")))))))
-
-(defn set-velocity-y [func {:keys [ball player] :as state}]
-  (let [ph (:player-height state)
-        player-velocity (/ (- (:y player) (:y ball)) (* ph (:maxspeed ball)))
-        ball-velocity (/ (- (:y ball) (:y player)) (* ph (:maxspeed ball) ))]
-    (if (= func +)
-      (-> state (assoc-in [:ball :vy] (func player-velocity)))
-      (-> state (assoc-in [:ball :vy] (func ball-velocity))))))
-
-(defn change-ball-direction [{:keys [ball player] :as state}]
-  (cond 
-    (> (:y player) (:y ball)) (set-velocity-y - state)
-    (< (:y player) (:y ball)) (set-velocity-y + state))
-  (-> state (update-in [:ball :vx] (* -1))))
+(defn handle-mouse-event [e]
+    (reset! mouse-state (.-offsetY e))
+    (.preventDefault e)
+    (.stopPropagation e))
 
 (defn draw [{:keys [player ball computer] :as state}]
   (let [cw (:canvas-width state)
         ch (:canvas-width state)
         ph (:player-height state)
         pw (:player-width state)]
-    
-    (if (:paused state)
+
+    (if-not @paused 
       (let [size 3
             rb (:radius ball)]
+
         (.clearRect ctx 0 0 cw ch)
+
         (set! (. ctx  -fillStyle) "rgb(64,64,64)")
 
         (dotimes [y (range 0 ch)]
@@ -99,35 +75,48 @@
         (set! (. ctx  -fillStyle) "rgba(192,192,192,8)")
 
         ;; Ball
-        (.fillRect ctx (- (:x ball) rb) (- (:y ball) rb) (* rb 2) (* rb 2))))))
+        (.fillRect ctx (- (:x ball) rb) (- (:y ball) rb) (* rb 2) (* rb 2))))
+    state))
+
+(defn set-velocity-y [func {:keys [ball player] :as state}]
+  (let [ph (:player-height state)
+        player-velocity (/ (- (:y player) (:y ball)) (* ph (:maxspeed ball)))
+        ball-velocity (/ (- (:y ball) (:y player)) (* ph (:maxspeed ball) ))]
+    (if (= func +)
+      (-> state (assoc-in [:ball :vy] (func player-velocity)))
+      (-> state (assoc-in [:ball :vy] (func ball-velocity))))))
+
+(defn change-ball-direction [{:keys [ball player] :as state}]
+  (cond 
+    (> (:y player) (:y ball)) (set-velocity-y - state)
+    (< (:y player) (:y ball)) (set-velocity-y + state))
+  (-> state 
+    (update-in [:ball :vx] (* -1))))
 
 (defn start-game [state]
   (let [$title-screen ($ :#titleScreen)
         $play-screen ($ :#playScreen)]
-    (.hide $title-screen)
-    (.show $play-screen)
-    (.log js/console "clicked..!")
-    (-> state 
-      (assoc :paused false))))
+    (do 
+      (.hide $title-screen)
+      (.show $play-screen))
+    (reset! paused false)))
 
 (defn pause-game [state]
   (let [$pause-button ($ :#pauseButton)]
-    (if-not (:paused state)
+    (if-not @paused
       (do
         (.html $pause-button "Continue.")
-        (-> state 
-         (assoc-in [:paused] true)))
+        (reset! paused true))
       (do
         (.html $pause-button "Pause.")
-        (-> state 
-          (assoc :paused false))))))
+        (reset! paused false)))))
 
-(defn intro []
+(defn intro [state]
   (let [play  (.getElementById js/document "playButton")
         pause (.getElementById js/document "pauseButton") 
         sound (.getElementById js/document "soundButton")]
-    (events/listen play  "click" #(start-game state))
-    (events/listen pause "click" #(pause-game state))))
+    (.addEventListener play "click" #(start-game state))
+    state))
 
 (defn computer-up? [{:keys [ball computer] :as state}] 
   (let [cy (:y computer)]
@@ -148,6 +137,11 @@
   (or (> (+ (:y ball) (:radius ball)) (:canvas-height state)) 
       (< (- (:y ball) (:radius ball)) 0)))
 
+(defn reverse-ball-direction [state]
+  (.log js/console (clj->js (:ball state)))
+  (-> state
+    (update-in [:ball :vy] #(* -1 %))))
+
 (defn bounce-ball [{:keys [ball] :as state}]
   ;; (play-sound :sound-wall)
   (if (<= (:y ball) (:radius ball)) 
@@ -155,8 +149,8 @@
       (assoc-in [:ball :y] (:radius ball)))
     (-> state 
       (assoc-in [:ball :y] (- (:canvas-height state) (:radius ball)))))
-  (-> state
-    (update-in [:ball :vy] #(* -1 %))))
+
+  (reverse-ball-direction state))
 
 (defn ball-hit-player? [{:keys [ball] :as state}]
   (>= (+ (:x ball) (:radius ball)) 
@@ -176,7 +170,7 @@
 (defn ball-player-collide [state]
   (if (player-collide? state) 
     (do 
-      (play-sound :sound-right) 
+      ;;(play-sound :sound-right) 
       (->> state 
         (ball-x-velocity inc))))
   (change-ball-direction state))
@@ -206,7 +200,7 @@
 (defn ball-computer-collide [{:keys [ball computer] :as state}]
   (if (ball-computer-collide? state)
     (do
-      (play-sound :sound-left)
+      ;;(play-sound :sound-left)
       (if (>= (:vx ball) (- (:maxspeed ball)))
         (->> state
             (ball-x-velocity dec)))
@@ -221,43 +215,57 @@
     (assoc-in [:ball :x] (inc (* (:vx ball) move-amount)))
     (assoc-in [:ball :y] (inc (* (:vy ball) move-amount)))))
 
+(defn move-mouse [state]
+  (let [ms @mouse-state]
+    (reset! mouse-state nil)
+      (if (not= @paused true)
+        (assoc-in state [:player :y] ms)
+        state)))
+
 (defn driver [state]
   (let [date-time (js/Date.)
         game-time (if (> (- date-time last-game-time) 0) (- date-time last-game-time) 0)
         move-amount (if (> game-time 0) (/ game-time 10) 1)
-        nstate (-> state (move-ball move-amount))]
-    (if (:paused nstate)
-      (draw
-        (cond 
-          ;; Move CPU player.
-          ;;(computer-up? nstate)   (-> nstate (move-computer move-amount inc))
-          ;;(computer-down? nstate) (-> nstate (move-computer move-amount dec))
-          
-          ;; Change direction of ball when hitting wall.
-          (ball-hit-wall? nstate) (-> state bounce-ball)
-          
-          ;; Collision between ball and player.
-          ;; (ball-hit-player? nstate) (-> nstate (ball-player-collide))
-          
-          ;; Collision beteween ball and CPU.
-          ;; (ball-hit-computer? nstate) (-> nstate (ball-computer-collide))
-          
-          ;; If no conditions are met keep ball moving.
-          :else (-> state (move-ball move-amount)))))))
+        state (-> (if (= @paused true)
+                    state
+                    (update-in state [:tick] (fnil inc 0)))
+                (move-mouse))]    
+    
+    (.log js/console move-amount)
 
-(defn load []
+    (draw 
+      (cond 
+        ;; Show the intro screen if paused.
+        (= @paused true) (intro state)
+
+        ;; (computer-up? state)   (-> state (move-computer move-amount inc))
+    
+        ;; (computer-down? state) (-> state (move-computer move-amount dec))
+    
+        ;; ;; Change direction of ball when hitting wall.
+        (ball-hit-wall? state) (-> state bounce-ball)
+          
+        ;; ;; Collision between ball and player.
+        (ball-hit-player? state) (-> state (ball-player-collide))
+        
+        ;; ;; Collision beteween ball and CPU.
+        ;; (ball-hit-computer? state) (-> state (ball-computer-collide))
+        
+        ;; If no conditions are met keep ball moving.      
+        :else (-> state (move-ball move-amount))))))
+
+(defn loaded []
   (let [init-state state
-        interval (/ 1000 fps)]
-    (events/listen js/window "mousemove" #(move-mouse state %)) 
+        interval (/ 1000 fps)]    
+    (.addEventListener js/document "mousemove" handle-mouse-event true)
     (.setTimeout js/window
       (fn game-loop [s]
         (let [state (or s init-state)
               new-state (driver state)]
-        (.setTimeout js/window
+          (.setTimeout js/window
             #(game-loop new-state)
             interval)))
       interval)))
 
-(defn init [] (load) (intro))
-
+(defn init [] (loaded))
 (.setTimeout js/window (fn [x] (init)) 0)
