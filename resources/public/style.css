@@ -49,7 +49,7 @@
 	Play screen
 */
 #playScreen {
-	display: none;
+	/*display: none;*/
 }
 
 #playScreen .ingamebuttons {
