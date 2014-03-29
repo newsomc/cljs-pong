@@ -28,7 +28,7 @@
      :vy (* (rand) (- 4 2))
      :bounces  0
      :radius 3
-     :multiplier .2
+     :multiplier 0.2
      :maxspeed 5
    }
    :player-height 80
@@ -93,7 +93,7 @@
   (-> state 
     (update-in [:ball :vx] (* -1))))
 
-(defn start-game [state]
+(defn start-game []
   (let [$title-screen ($ :#titleScreen)
         $play-screen ($ :#playScreen)]
     (do 
@@ -114,8 +114,10 @@
 (defn intro [state]
   (let [play  (.getElementById js/document "playButton")
         pause (.getElementById js/document "pauseButton") 
-        sound (.getElementById js/document "soundButton")]
-    (.addEventListener play "click" #(start-game state))
+        sound (.getElementById js/document "soundButton")
+        $play-screen ($ :#playScreen)]
+    (.hide $play-screen)
+    (.addEventListener play "click" #(start-game))
     state))
 
 (defn computer-up? [{:keys [ball computer] :as state}] 
@@ -133,24 +135,20 @@
     (assoc-in [:computer :y] (func (* (:computer-speed state) move-amount)))))
 
 (defn ball-hit-wall? [{:keys [ball] :as state}]
-  ;;(.log js/console (- (:y ball) (:radius ball)))
   (or (> (+ (:y ball) (:radius ball)) (:canvas-height state)) 
       (< (- (:y ball) (:radius ball)) 0)))
 
 (defn reverse-ball-direction [state]
-  (.log js/console (clj->js (:ball state)))
   (-> state
     (update-in [:ball :vy] #(* -1 %))))
 
 (defn bounce-ball [{:keys [ball] :as state}]
-  ;; (play-sound :sound-wall)
-  (if (<= (:y ball) (:radius ball)) 
-    (-> state
-      (assoc-in [:ball :y] (:radius ball)))
-    (-> state 
-      (assoc-in [:ball :y] (- (:canvas-height state) (:radius ball)))))
-
-  (reverse-ball-direction state))
+  (let [new-state (reverse-ball-direction state)]
+    (if (<= (:y ball) (:radius ball)) 
+      (-> new-state
+        (assoc-in [:ball :y] (:radius ball)))
+      (-> new-state 
+        (assoc-in [:ball :y] (- (:canvas-height new-state) (:radius ball)))))))
 
 (defn ball-hit-player? [{:keys [ball] :as state}]
   (>= (+ (:x ball) (:radius ball)) 
@@ -162,18 +160,17 @@
          (<= (+ (:y ball) (:radius ball)) (+ (:y player) (/ ph 2))))))
 
 (defn ball-x-velocity [func {:keys [ball] :as state}]
+  (.log js/console "called with: "  func)
   (let [mult (:multiplier ball)]
     (if (<= (:vx ball) (:maxspeed ball)) 
       (-> state 
-        (update-in [:ball :vx] (func mult))))))
+        (update-in [:ball :vx] func mult)))))
 
 (defn ball-player-collide [state]
+  (.log js/console (clj->js state))
   (if (player-collide? state) 
-    (do 
-      ;;(play-sound :sound-right) 
-      (->> state 
-        (ball-x-velocity inc))))
-  (change-ball-direction state))
+    (let [new-state (change-ball-direction state)]
+      (ball-x-velocity inc new-state))))
 
 (defn ball-hit-computer? [{:keys [ball] :as state}]
   (let [pw (:player-width state)]
@@ -212,8 +209,8 @@
 
 (defn move-ball [{:keys [ball] :as state} move-amount]
   (-> state
-    (assoc-in [:ball :x] (inc (* (:vx ball) move-amount)))
-    (assoc-in [:ball :y] (inc (* (:vy ball) move-amount)))))
+    (update-in [:ball :x] + (* (:vx ball) move-amount))
+    (update-in [:ball :y] + (* (:vy ball) move-amount))))
 
 (defn move-mouse [state]
   (let [ms @mouse-state]
@@ -224,14 +221,14 @@
 
 (defn driver [state]
   (let [date-time (js/Date.)
-        game-time (if (> (- date-time last-game-time) 0) (- date-time last-game-time) 0)
-        move-amount (if (> game-time 0) (/ game-time 10) 1)
+        game-time  (if (> (- date-time last-game-time) 0) (- date-time last-game-time) 0)
+        move-amount 8
         state (-> (if (= @paused true)
                     state
                     (update-in state [:tick] (fnil inc 0)))
                 (move-mouse))]    
-    
-    (.log js/console move-amount)
+
+    (.log js/console "move amount" move-amount)
 
     (draw 
       (cond 
@@ -246,13 +243,13 @@
         (ball-hit-wall? state) (-> state bounce-ball)
           
         ;; ;; Collision between ball and player.
-        (ball-hit-player? state) (-> state (ball-player-collide))
+        (ball-hit-player? state) (-> state ball-player-collide)
         
         ;; ;; Collision beteween ball and CPU.
         ;; (ball-hit-computer? state) (-> state (ball-computer-collide))
         
         ;; If no conditions are met keep ball moving.      
-        :else (-> state (move-ball move-amount))))))
+        :else (if-not @paused (-> state (move-ball move-amount)))))))
 
 (defn loaded []
   (let [init-state state
